@@ -58,6 +58,22 @@
 #    define ENCODER_BUTTON_COL 0
 #endif
 
+// SIZE x FREQ = TIME window
+#ifndef AXISLOCK_HISTORY_SIZE
+#  define AXISLOCK_HISTORY_SIZE 10
+#endif
+#ifndef AXISLOCK_HISTORY_FREQ
+#  define AXISLOCK_HISTORY_FREQ 10
+#endif
+
+int8_t axislock_history_x[AXISLOCK_HISTORY_SIZE];
+int8_t axislock_history_y[AXISLOCK_HISTORY_SIZE];
+uint16_t axislock_history_t[AXISLOCK_HISTORY_SIZE];
+uint8_t axislock_history_head = 0;
+uint8_t axislock_history_tail = 0;
+float axislock_accumulated_x = 0;
+float axislock_accumulated_y = 0;
+
 keyboard_config_t keyboard_config;
 uint16_t          dpi_array[] = PLOOPY_DPI_OPTIONS;
 #define DPI_OPTION_SIZE ARRAY_SIZE(dpi_array)
@@ -65,6 +81,8 @@ uint16_t          dpi_array[] = PLOOPY_DPI_OPTIONS;
 // Trackball State
 bool  is_scroll_clicked    = false;
 bool  is_drag_scroll       = false;
+bool  is_drag_select       = false;
+
 float scroll_accumulated_h = 0;
 float scroll_accumulated_v = 0;
 
@@ -163,10 +181,64 @@ report_mouse_t pointing_device_task_kb(report_mouse_t mouse_report) {
         mouse_report.y = 0;
     }
 
+    if (is_drag_select) {
+        mouse_report.buttons |= MOUSE_BTN1;
+
+        if(timer_elapsed(axislock_history_t[axislock_history_head]) > AXISLOCK_HISTORY_FREQ) {
+            axislock_history_head = (axislock_history_head + 1) % AXISLOCK_HISTORY_SIZE;
+
+            if (axislock_history_head == axislock_history_tail) {
+                axislock_history_tail = (axislock_history_tail + 1) % AXISLOCK_HISTORY_SIZE;
+            }
+            axislock_history_t[axislock_history_head] = timer_read();
+            axislock_history_x[axislock_history_head] = 0;
+            axislock_history_y[axislock_history_head] = 0;
+        }
+
+        axislock_history_x[axislock_history_head] += mouse_report.x;
+        axislock_history_y[axislock_history_head] += mouse_report.y;
+
+        float vel_x = 0.0, vel_y = 0.0;
+        uint8_t count = 0;
+        int8_t i0 = axislock_history_tail;
+        int8_t i1 = (axislock_history_tail + 1) % AXISLOCK_HISTORY_SIZE;
+
+        while (i1 != (axislock_history_head + 1) % AXISLOCK_HISTORY_SIZE) {
+            uint16_t t0 = axislock_history_t[i0];
+            uint16_t t1 = axislock_history_t[i1];
+
+            int8_t x = axislock_history_x[i1];
+            int8_t y = axislock_history_y[i1];
+
+            uint8_t t = timer_elapsed(t1) - timer_elapsed(t0);
+
+            vel_x += (float)abs(x) / (float)t;
+            vel_y += (float)abs(y) / (float)t;
+
+            ++count;
+            i0 = i1;
+            i1 = (i1 + 1) % AXISLOCK_HISTORY_SIZE;
+        }
+        vel_x = vel_x / (float)count;
+        vel_y = vel_y / (float)count;
+
+        if (vel_x > vel_y) {
+            mouse_report.y = 0;
+        } else {
+            mouse_report.x = 0;
+        }
+        /* Axis lock */
+        // if (mouse_report.x > mouse_report.y) {
+        //    mouse_report.y = 0;
+        // } else {
+        //    mouse_report.x = 0;
+        // }
+    }
     return pointing_device_task_user(mouse_report);
 }
 
 bool process_record_kb(uint16_t keycode, keyrecord_t* record) {
+
     if (debug_mouse) {
         dprintf("KL: kc: %u, col: %u, row: %u, pressed: %u\n", keycode, record->event.key.col, record->event.key.row, record->event.pressed);
     }
@@ -197,6 +269,25 @@ bool process_record_kb(uint16_t keycode, keyrecord_t* record) {
 #endif
     }
 
+    if (keycode == DRAG_SELECT) {
+        report_mouse_t drag = pointing_device_get_report();
+        if (record->event.pressed) {
+            is_drag_select ^= 1;
+            drag.buttons |= MOUSE_BTN1;
+            axislock_accumulated_x = axislock_accumulated_y = 0;
+            axislock_history_x[axislock_history_head] =
+                axislock_history_y[axislock_history_head] = 0;
+            axislock_history_t[axislock_history_head] = timer_read();
+
+            pointing_device_set_report(drag);
+            pointing_device_send();
+        }
+        else if (!is_drag_select) {
+            drag.buttons &= ~MOUSE_BTN1;
+            pointing_device_set_report(drag);
+            pointing_device_send();
+        }
+    }
     return true;
 }
 

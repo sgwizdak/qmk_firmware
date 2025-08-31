@@ -17,6 +17,21 @@
  */
 #include QMK_KEYBOARD_H
 
+/*
+ * How to read this:
+ * [0] = LAYOUT( KC_BTN3, KC_BTN5, DRAG_SCROLL, KC_BTN4, KC_BTN1, KC_BTN2 )
+ *   Bottom Left: mouse button 1 - left click
+ *   Bottom Right: mouse button 2 - right click
+ *   Top Left: mouse button 3
+ *   Top Right: mouse button 4 - used to switch applications
+ *   Top Middle Left: mouse button 5
+ *   Top Middle Right: drag scroll
+ *   we have added: DRAG_SELECT
+ * [0] = LAYOUT( KC_BTN3, DPI_CONFIG, DRAG_SELECT, DRAG_SCROLL, KC_BTN2, KC_BTN1 )
+ */
+
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-    [0] = LAYOUT( KC_BTN4, KC_BTN5, DRAG_SCROLL, KC_BTN2, KC_BTN1, KC_BTN3 )
+    // [0] = LAYOUT( KC_BTN4, KC_BTN5, DRAG_SCROLL, KC_BTN2, KC_BTN1, KC_BTN3 )
+    [0] = LAYOUT( KC_BTN3, DPI_CONFIG, DRAG_SELECT, DRAG_SCROLL, KC_BTN2, KC_BTN1 )
 };
+
